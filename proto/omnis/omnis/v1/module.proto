@@ -1,0 +1,24 @@
+// proto/omnis/omnis/module/v1/module.proto
+syntax = "proto3";
+package omnis.omnis.module.v1; // Note the 'module.v1' in the package
+
+
+
+option go_package = "github.com/shubham/omnis/x/omnis/types";
+
+import "cosmos/app/v1alpha1/module.proto";
+import "google/protobuf/duration.proto"; // Example for module parameters
+import "google/protobuf/timestamp.proto"; // Example for module parameters
+
+// Module is the config object of the omnis module.
+// Learn more: https://docs.cosmos.network/main/build/building-modules/depinject
+message Module {
+  option (cosmos.app.v1alpha1.module) = {
+    go_import: "omnis/x/omnis" // This is the Go import path for your module
+  };
+
+  // Set module parameters (optional)
+  // For example:
+  // string some_param = 1;
+  // google.protobuf.Duration max_period = 2;
+}

@@ -1,0 +1,15 @@
+syntax = "proto3";
+package omnis.token.v1;
+
+option go_package = "omnis/x/token/types";
+
+// Token defines the Token message.
+message Token {
+  uint64 id = 1;
+  string name = 2;
+  string symbol = 3;
+  uint32 decimals = 4;
+  string total_supply = 5;
+  string metadata = 6;
+  string creator = 7;
+}

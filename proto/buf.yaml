@@ -1,0 +1,7 @@
+version: v1
+name: buf.build/shubham/omnis
+
+deps:
+  - buf.build/cosmos/gogo-proto
+  - buf.build/cosmos/cosmos-sdk
+  - buf.build/googleapis/googleapis

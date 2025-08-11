@@ -1,0 +1,12 @@
+// x/omnis/types/item.proto
+syntax = "proto3";
+package omnis.omnis;
+option go_package = "omnis/x/omnis/types";
+
+// Item represents a generic item in the omnis module
+message Item {
+  string id = 1;
+  string name = 2;
+  string owner = 3;
+  // Add other fields relevant to your item
+}

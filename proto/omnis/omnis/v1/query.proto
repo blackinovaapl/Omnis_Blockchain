@@ -1,0 +1,39 @@
+// x/omnis/types/query.proto
+syntax = "proto3";
+
+package omnis.omnis.v1;
+
+option go_package = "omnis/x/omnis/types";
+
+import "google/api/annotations.proto";
+import "gogoproto/gogo.proto";  // ✅ Required for nullable option
+import "cosmos/base/query/v1beta1/pagination.proto";
+import "omnis/omnis/v1/params.proto";
+import "omnis/omnis/v1/item.proto";
+
+// Query request/response for single item
+message QueryGetItemRequest {
+  string id = 1;
+}
+
+message QueryGetItemResponse {
+  Item item = 1;
+}
+
+// Params
+message QueryParamsRequest {}
+
+message QueryParamsResponse {
+  Params params = 1 [(gogoproto.nullable) = false];
+}
+
+// Query service
+service Query {
+  rpc Params(QueryParamsRequest) returns (QueryParamsResponse) {
+    option (google.api.http).get = "/omnis/omnis/params";
+  }
+
+  rpc GetItem(QueryGetItemRequest) returns (QueryGetItemResponse) {
+    option (google.api.http).get = "/omnis/omnis/item/{id}";
+  }
+}

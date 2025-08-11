@@ -1,0 +1,69 @@
+// x/omnis/types/tx.proto
+syntax = "proto3";
+package omnis.omnis.v1;
+
+option go_package = "omnis/x/omnis/types";
+
+
+import "cosmos_proto/cosmos.proto";
+
+import "gogoproto/gogo.proto"; // For gogoproto options
+import "cosmos/msg/v1/msg.proto"; // For cosmos.msg.v1.signer option
+import "omnis/omnis/v1/params.proto"; // If you have Params in this module (you do)
+
+// NEW: Add the MsgCreateItem, MsgUpdateItem messages here
+// These were mistakenly in item.proto
+message MsgCreateItem {
+  option (cosmos.msg.v1.signer) = "creator"; // Specifies who signs this transaction
+  option (gogoproto.equal) = false;
+  option (gogoproto.goproto_getters) = false;
+
+  string creator = 1; // Address of the message sender (creator of the item)
+  string id = 2;      // The desired ID for the new item
+  string name = 3;    // The name of the new item
+}
+
+message MsgCreateItemResponse {} // Response when an item is created successfully
+
+message MsgUpdateItem {
+  option (cosmos.msg.v1.signer) = "creator";
+  option (gogoproto.equal) = false;
+  option (gogoproto.goproto_getters) = false;
+
+  string creator = 1; // Address of the sender (must be the owner)
+  string id = 2;      // ID of the item to update
+  string new_name = 3; // The new name for the item
+}
+
+message MsgUpdateItemResponse {} // Response when an item is updated successfully
+
+// You might also have MsgDeleteItem
+// message MsgDeleteItem { ... }
+// message MsgDeleteItemResponse { ... }
+
+// You should also have the MsgUpdateParams definitions here if they weren't
+// already present in your tx.proto:
+// MsgUpdateParams is a request type for updating the module parameters.
+message MsgUpdateParams {
+  option (cosmos.msg.v1.signer) = "authority";
+  option (gogoproto.equal) = false;
+  option (gogoproto.goproto_getters) = false;
+
+  string authority = 1 [(cosmos_proto.scalar) = "cosmos.AddressBytes"];
+  Params params = 2 [(gogoproto.nullable) = false];
+}
+
+// MsgUpdateParamsResponse defines the response structure for executing a
+// MsgUpdateParams message.
+message MsgUpdateParamsResponse {}
+
+
+// And the Msg service itself should be here:
+service Msg {
+  option (cosmos.msg.v1.service) = true;
+
+  rpc CreateItem(MsgCreateItem) returns (MsgCreateItemResponse);
+  rpc UpdateItem(MsgUpdateItem) returns (MsgUpdateItemResponse);
+  rpc UpdateParams(MsgUpdateParams) returns (MsgUpdateParamsResponse);
+  // Add other Msg RPCs here (e.g., DeleteItem)
+}

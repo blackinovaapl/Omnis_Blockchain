@@ -1,0 +1,92 @@
+syntax = "proto3";
+
+package omnis.token.v1;
+
+import "gogoproto/amino/amino.proto";
+
+import "cosmos/msg/v1/msg.proto";
+import "cosmos_proto/cosmos.proto";
+import "gogoproto/gogo.proto";
+import "omnis/token/v1/params.proto";
+
+option go_package = "omnis/x/token/types";
+
+// Msg defines the Msg service.
+service Msg {
+  option (cosmos.msg.v1.service) = true;
+
+  // UpdateParams defines a (governance) operation for updating the module
+  // parameters. The authority defaults to the x/gov module account.
+  rpc UpdateParams(MsgUpdateParams) returns (MsgUpdateParamsResponse);
+
+  // CreateToken defines the CreateToken RPC.
+  rpc CreateToken(MsgCreateToken) returns (MsgCreateTokenResponse);
+
+  // UpdateToken defines the UpdateToken RPC.
+  rpc UpdateToken(MsgUpdateToken) returns (MsgUpdateTokenResponse);
+
+  // DeleteToken defines the DeleteToken RPC.
+  rpc DeleteToken(MsgDeleteToken) returns (MsgDeleteTokenResponse);
+}
+
+// MsgUpdateParams is the Msg/UpdateParams request type.
+message MsgUpdateParams {
+  option (cosmos.msg.v1.signer) = "authority";
+  option (amino.name) = "omnis/x/token/MsgUpdateParams";
+
+  // authority is the address that controls the module (defaults to x/gov unless overwritten).
+  string authority = 1 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+
+  // params defines the module parameters to update.
+
+  // NOTE: All parameters must be supplied.
+  Params params = 2 [
+    (gogoproto.nullable) = false,
+    (amino.dont_omitempty) = true
+  ];
+}
+
+// MsgUpdateParamsResponse defines the response structure for executing a
+// MsgUpdateParams message.
+message MsgUpdateParamsResponse {}
+
+// MsgCreateToken defines the MsgCreateToken message.
+message MsgCreateToken {
+  option (cosmos.msg.v1.signer) = "creator";
+  string creator = 1 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  string name = 2;
+  string symbol = 3;
+  string decimals = 4;
+  string total_supply = 5;
+  string metadata = 6;
+}
+
+// MsgCreateTokenResponse defines the MsgCreateTokenResponse message.
+message MsgCreateTokenResponse {
+  uint64 id = 1;
+}
+
+// MsgUpdateToken defines the MsgUpdateToken message.
+message MsgUpdateToken {
+  option (cosmos.msg.v1.signer) = "creator";
+  string creator = 1 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  uint64 id = 2;
+  string name = 3;
+  string symbol = 4;
+  string decimals = 5;
+  string total_supply = 6;
+  string metadata = 7;
+}
+
+// MsgUpdateTokenResponse defines the MsgUpdateTokenResponse message.
+message MsgUpdateTokenResponse {}
+
+// MsgDeleteToken defines the MsgDeleteToken message.
+message MsgDeleteToken {
+  option (cosmos.msg.v1.signer) = "creator";
+  string creator = 1 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  uint64 id = 2;
+}
+
+// MsgDeleteTokenResponse defines the MsgDeleteTokenResponse message.
+message MsgDeleteTokenResponse {}

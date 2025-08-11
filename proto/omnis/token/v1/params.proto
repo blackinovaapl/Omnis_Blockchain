@@ -1,0 +1,14 @@
+syntax = "proto3";
+package omnis.token.v1;
+
+import "gogoproto/amino/amino.proto";
+
+import "gogoproto/gogo.proto";
+
+option go_package = "omnis/x/token/types";
+
+// Params defines the parameters for the module.
+message Params {
+  option (amino.name) = "omnis/x/token/Params";
+  option (gogoproto.equal) = true;
+}
