@@ -23,7 +23,7 @@ import (
 	"github.com/cosmos/cosmos-sdk/client/flags"
 	simtestutil "github.com/cosmos/cosmos-sdk/testutil/sims"
 	simulationtypes "github.com/cosmos/cosmos-sdk/types/simulation"
-	authzkeeper "github.com/cosmos/cosmos-sdk/x/authz/keeper"
+	authzkeeper "cosmossdk.io/x/authz/keeper"
 	"github.com/cosmos/cosmos-sdk/x/simulation"
 	simcli "github.com/cosmos/cosmos-sdk/x/simulation/client/cli"
 	slashingtypes "github.com/cosmos/cosmos-sdk/x/slashing/types"

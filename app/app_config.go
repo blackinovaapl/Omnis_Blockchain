@@ -45,7 +45,7 @@ import (
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
 	_ "github.com/cosmos/cosmos-sdk/x/auth/vesting" // import for side-effects
 	vestingtypes "github.com/cosmos/cosmos-sdk/x/auth/vesting/types"
-	"github.com/cosmos/cosmos-sdk/x/authz"
+		"cosmossdk.io/x/authz"
 	_ "github.com/cosmos/cosmos-sdk/x/authz/module" // import for side-effects
 	_ "github.com/cosmos/cosmos-sdk/x/bank"         // import for side-effects
 	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"

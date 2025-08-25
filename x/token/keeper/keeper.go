@@ -1,80 +1,120 @@
+// In file: x/token/keeper/keeper.go
 
 package keeper
 
 import (
 	"context" // New: Needed for collections interactions
 	"fmt"
+	"strings" // New: Needed for symbol normalization
 
 	"omnis/x/token/types"
 
 	"cosmossdk.io/collections" // Keep collections
 	"cosmossdk.io/core/address"
+	"cosmossdk.io/core/store" // New: Add store.KVStoreService
 	"cosmossdk.io/log" // Use cosmossdk.io/log instead of tendermint/tendermint/libs/log
-
-	sdk "github.com/cosmos/cosmos-sdk/types" // New: Needed for bankKeeper
-	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types" // New: Needed for accountKeeper if not already there
-	bankkeeper "github.com/cosmos/cosmos-sdk/x/bank/keeper" // New: Import bankkeeper
+	storetypes "cosmossdk.io/store/types"
+	"github.com/cosmos/cosmos-sdk/codec"
+	sdk "github.com/cosmos/cosmos-sdk/types"
+	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
+	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
 )
 
-type (
-	Keeper struct {
-		// Keep the collections that Ignite scaffolded
-		Token    collections.Map[uint64, types.Token]
-		TokenSeq collections.Sequence
-		Schema   collections.Schema
+type Keeper struct {
+	// Keeper dependencies
+	cdc          codec.BinaryCodec
+	addressCodec address.Codec
+	storeService store.KVStoreService
+	logger       log.Logger
 
-		addressCodec address.Codec
-		bankKeeper   bankkeeper.Keeper       // New: Add bankKeeper
-		accountKeeper types.AccountKeeper    // New: Add accountKeeper (use types.AccountKeeper to match interface)
-	}
-)
+	// Here we declare our module dependencies
+	bankKeeper    banktypes.BankKeeper // Use the interface from banktypes
+	accountKeeper authtypes.AccountKeeper // Use the interface from authtypes
 
+	// Collections
+	TokenSeq      collections.Sequence
+	Token         collections.Map[uint64, types.Token]
+	TokenBySymbol collections.Map[string, uint64] // New: Index for fast symbol lookup
+}
+
+// NewKeeper creates a new Keeper instance
 func NewKeeper(
+	cdc codec.BinaryCodec,
 	addressCodec address.Codec,
-	storeService sdk.StoreService, // Use StoreService from SDK context
-	bankKeeper bankkeeper.Keeper,     // New: Pass bankKeeper
-	accountKeeper types.AccountKeeper, // New: Pass accountKeeper
+	storeService store.KVStoreService,
+	logger log.Logger,
+	bankKeeper banktypes.BankKeeper,
+	accountKeeper authtypes.AccountKeeper,
 ) Keeper {
 	sb := collections.NewSchemaBuilder(storeService)
 	k := Keeper{
+		cdc:          cdc,
 		addressCodec: addressCodec,
-		bankKeeper:   bankKeeper,      // Assign bankKeeper
-		accountKeeper: accountKeeper, // Assign accountKeeper
+		storeService: storeService,
+		logger:       logger,
+		bankKeeper:   bankKeeper,
+		accountKeeper: accountKeeper,
 		TokenSeq: collections.NewSequence(sb, types.TokenKeyPrefix+"_seq"),
-		Token: collections.NewMap(sb, types.TokenKeyPrefix, collections.Uint64Key, sdk.NewProtoValue(types.Token{})),
+		Token: collections.NewMap(sb, types.TokenKeyPrefix, collections.Uint64Key, codec.CollValue[types.Token](cdc)),
+		TokenBySymbol: collections.NewMap(sb, types.TokenSymbolKeyPrefix, collections.StringKey, codec.CollValue[uint64](cdc)),
 	}
-	schema, err := sb.Build()
-	if err != nil {
-		panic(err)
-	}
-	k.Schema = schema
+
+	// This is not needed with the new collections.NewSchemaBuilder
+	// schema, err := sb.Build()
+	// if err != nil {
+	// 	panic(err)
+	// }
+	// k.Schema = schema
+
 	return k
 }
 
-func (k Keeper) Logger(ctx context.Context) log.Logger { // Use context.Context for collections
-	sdkCtx := sdk.UnwrapSDKContext(ctx) // Unwrap to sdk.Context for logger if needed
-	return sdkCtx.Logger().With("module", fmt.Sprintf("x/%s", types.ModuleName))
+// GetTokenBySymbol retrieves a token by its symbol from the store.
+// This is now efficient due to the dedicated index.
+func (k Keeper) GetTokenBySymbol(ctx context.Context, symbol string) (val types.Token, found bool) {
+	// Normalize the symbol for case-insensitive lookup if needed
+	symbol = strings.ToLower(symbol)
+
+	// Get the token ID from the symbol-to-ID index
+	id, err := k.TokenBySymbol.Get(ctx, symbol)
+	if err != nil {
+		return types.Token{}, false
+	}
+
+	// Get the token itself using the ID
+	token, err := k.Token.Get(ctx, id)
+	if err != nil {
+		return types.Token{}, false
+	}
+
+	return token, true
 }
 
-// GetTokenBySymbol: Iterate through tokens to find by symbol.
-// In a production environment, for better performance, you would add a secondary
-// index (e.g., collections.Map[string, uint64]) to map symbols to token IDs.
-func (k Keeper) GetTokenBySymbol(ctx context.Context, symbol string) (val types.Token, found bool) {
-	// Iterate through all tokens. This is inefficient for a large number of tokens.
-	// For simplicity in this tutorial, we'll use this method.
-	// For a scalable solution, consider a collections.Map[string, uint64] to map symbols to IDs.
-	err := k.Token.Walk(ctx, nil, func(key uint64, token types.Token) (stop bool, err error) {
-		if token.Symbol == symbol {
-			val = token
-			found = true
-			return true, nil // Stop iteration
-		}
-		return false, nil // Continue iteration
-	})
+// AppendToken adds a new token to the store and returns its ID.
+// This function needs to be updated to also write to the new TokenBySymbol index.
+func (k Keeper) AppendToken(ctx context.Context, token types.Token) uint64 {
+	id, err := k.TokenSeq.Next(ctx)
 	if err != nil {
-		// Log error or handle appropriately, but don't return error in signature
-		// if the goal is just to return found status.
-		k.Logger(ctx).Error("error walking tokens to find by symbol", "error", err)
+		panic("failed to get next token ID")
 	}
-	return val, found
+	token.Id = id
+
+	// Set the token
+	err = k.Token.Set(ctx, id, token)
+	if err != nil {
+		panic("failed to set token")
+	}
+
+	// Set the symbol-to-ID mapping
+	err = k.TokenBySymbol.Set(ctx, strings.ToLower(token.Symbol), id)
+	if err != nil {
+		panic("failed to set token symbol index")
+	}
+
+	return id
+}
+
+// Logger returns the module's logger.
+func (k Keeper) Logger(ctx context.Context) log.Logger {
+	return k.logger.With("module", fmt.Sprintf("x/%s", types.ModuleName))
 }

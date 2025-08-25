@@ -1,18 +1,19 @@
 module omnis
 
 go 1.24.4
+
 replace (
-    github.com/cosmos/ibc-go/v8 => github.com/cosmos/ibc-go/v10 v10.2.0
-    github.com/gin-gonic/gin => github.com/gin-gonic/gin v1.9.1
-    github.com/syndtr/goleveldb => github.com/syndtr/goleveldb v1.0.1-0.20210819022825-2ae1ddf74ef7
-    nhooyr.io/websocket => github.com/coder/websocket v1.8.7
+	github.com/cometbft/cometbft => github.com/cometbft/cometbft v0.38.17
 
-    // These are the crucial core replacements for the main SDK and CometBFT
-    github.com/cosmos/cosmos-sdk => github.com/cosmos/cosmos-sdk v0.53.3
-    github.com/cometbft/cometbft => github.com/cometbft/cometbft v0.38.17
+	// These are the crucial core replacements for the main SDK and CometBFT
+	github.com/cosmos/cosmos-sdk => github.com/cosmos/cosmos-sdk v0.53.3
+	github.com/cosmos/ibc-go/v8 => github.com/cosmos/ibc-go/v10 v10.2.0
+	github.com/gin-gonic/gin => github.com/gin-gonic/gin v1.9.1
+	github.com/syndtr/goleveldb => github.com/syndtr/goleveldb v1.0.1-0.20210819022825-2ae1ddf74ef7
+	nhooyr.io/websocket => github.com/coder/websocket v1.8.7
 )
-require (
 
+require (
 	cosmossdk.io/api v0.9.2
 	cosmossdk.io/client/v2 v2.0.0-beta.11
 	cosmossdk.io/collections v1.2.1

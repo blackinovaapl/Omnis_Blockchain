@@ -255,12 +255,6 @@ func New(
 		),
 
 
-		   // create the simulation manager and define the order of the modules for deterministic simulations
-    overridemodules:= map[string]module.AppModuleSimulation{
-        authtypes.ModuleName: auth.NewAppModule(app.appCodec, app.AuthKeeper, authsims.RandomGenesisAccounts, app.GetTxConfig()),
-    }
-    app.sm = module.NewSimulationManagerFromAppModules(app.mm.Modules, overridemodules)
-    app.sm.RegisterStoreDecoders()
 
 
 	
@@ -275,7 +269,7 @@ func New(
 		circuit.NewAppModule(app.appCodec, app.CircuitBreakerKeeper),
 		upgrade.NewAppModule(app.UpgradeKeeper),
 		authz.NewAppModule(app.appCodec, app.AuthzKeeper, app.AuthKeeper.AccountKeeper(), app.BankKeeper, app.interfaceRegistry),
-		feegrant.NewAppModule(app.appCodec, app.BankKeeper, app.AuthKeeper.AccountKeeper(), app.interfaceRegistry),
+		feegrant.NewAppModule(app.appCodec, app.FeeGrantKeeper, app.AuthKeeper.AccountKeeper(), app.BankKeeper, app.interfaceRegistry),
 		evidence.NewAppModule(app.AuthKeeper.AccountKeeper(), app.BankKeeper, app.SlashingKeeper), // Added Evidence Module
 		consensus.NewAppModule(app.appCodec, app.ConsensusParamsKeeper), // Added Consensus Module
 		// IBC modules
