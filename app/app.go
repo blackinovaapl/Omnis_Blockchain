@@ -1,432 +1,400 @@
 package app
 
 import (
+	"context"
+	"fmt"
 	"io"
+	"os"
+	"path/filepath"
+	"time"
 
-	clienthelpers "cosmossdk.io/client/v2/helpers"
+	"cosmossdk.io/api/cosmos/app/runtime/v1alpha1"
+	"cosmossdk.io/client/v2/autocli"
 	"cosmossdk.io/core/appmodule"
 	"cosmossdk.io/depinject"
 	"cosmossdk.io/log"
-	storetypes "cosmossdk.io/store/types"
-	circuit "cosmossdk.io/x/circuit"
-	circuitkeeper "cosmossdk.io/x/circuit/keeper"
-	upgrade "cosmossdk.io/x/upgrade"
-	upgradekeeper "cosmossdk.io/x/upgrade/keeper"
-	abci "github.com/cometbft/cometbft/abci/types"
-	dbm "github.com/cosmos/cosmos-db"
-	"github.com/cosmos/cosmos-sdk/baseapp"
-	"github.com/cosmos/cosmos-sdk/client"
-	"github.com/cosmos/cosmos-sdk/codec"
-	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
-	"github.com/cosmos/cosmos-sdk/runtime"
-	"github.com/cosmos/cosmos-sdk/server"
-	"github.com/cosmos/cosmos-sdk/server/api"
-	"github.com/cosmos/cosmos-sdk/server/config"
-	servertypes "github.com/cosmos/cosmos-sdk/server/types"
-	sdk "github.com/cosmos/cosmos-sdk/types"
-	"github.com/cosmos/cosmos-sdk/types/module"
-
-	// Cosmos SDK modules using cosmossdk.io paths
-	auth "cosmossdk.io/x/auth"
+	"cosmossdk.io/server/api"
+	serverconfig "cosmossdk.io/server/config"
+	servertypes "cosmossdk.io/server/types"
+	"cosmossdk.io/store/types"
+	"cosmossdk.io/x/auth"
 	authkeeper "cosmossdk.io/x/auth/keeper"
-	authsims "cosmossdk.io/x/auth/simulation"
 	authtypes "cosmossdk.io/x/auth/types"
+	"cosmossdk.io/x/auth/tx/config"
 	authz "cosmossdk.io/x/authz"
 	authzkeeper "cosmossdk.io/x/authz/keeper"
-	bank "cosmossdk.io/x/bank"
+	authzmodule "cosmossdk.io/x/authz/module"
+	"cosmossdk.io/x/bank"
 	bankkeeper "cosmossdk.io/x/bank/keeper"
 	banktypes "cosmossdk.io/x/bank/types"
-	consensus "cosmossdk.io/x/consensus"
-	consensuskeeper "cosmossdk.io/x/consensus/keeper"
-	consensustypes "cosmossdk.io/x/consensus/types"
-	distr "cosmossdk.io/x/distribution"
+	"cosmossdk.io/x/consensus"
+	consensusparamkeeper "cosmossdk.io/x/consensus/keeper"
+	"cosmossdk.io/x/crisis"
+	crisiskeeper "cosmossdk.io/x/crisis/keeper"
+	crisistypes "cosmossdk.io/x/crisis/types"
+	"cosmossdk.io/x/distribution"
 	distrkeeper "cosmossdk.io/x/distribution/keeper"
-	distrtypes "cosmossdk.io/x/distribution/types"
-	evidence "cosmossdk.io/x/evidence" // Corrected import
-	evidencetypes "cosmossdk.io/x/evidence/types" // Corrected import
-	feegrant "cosmossdk.io/x/feegrant" // Corrected import
-	feegrantkeeper "cosmossdk.io/x/feegrant/keeper" // Added
-	genutil "github.com/cosmos/cosmos-sdk/x/genutil"
-	genutiltypes "github.com/cosmos/cosmos-sdk/x/genutil/types"
-	gov "cosmossdk.io/x/gov"
+	"cosmossdk.io/x/evidence"
+	evidencekeeper "cosmossdk.io/x/evidence/keeper"
+	"cosmossdk.io/x/feegrant"
+	feegrantkeeper "cosmossdk.io/x/feegrant/keeper"
+	feegrantmodule "cosmossdk.io/x/feegrant/module"
+	"cosmossdk.io/x/genutil"
+	genutiltypes "cosmossdk.io/x/genutil/types"
+	"cosmossdk.io/x/gov"
 	govkeeper "cosmossdk.io/x/gov/keeper"
 	govtypes "cosmossdk.io/x/gov/types"
-	mint "cosmossdk.io/x/mint"
+	"cosmossdk.io/x/group"
+	groupkeeper "cosmossdk.io/x/group/keeper"
+	groupmodule "cosmossdk.io/x/group/module"
+	"cosmossdk.io/x/mint"
 	mintkeeper "cosmossdk.io/x/mint/keeper"
 	minttypes "cosmossdk.io/x/mint/types"
-	params "cosmossdk.io/x/params"
-	paramskeeper "cosmossdk.io/x/params/keeper"
-	paramstypes "cosmossdk.io/x/params/types"
-	slashing "cosmossdk.io/x/slashing"
+	"cosmossdk.io/x/slashing"
 	slashingkeeper "cosmossdk.io/x/slashing/keeper"
-	slashingtypes "cosmossdk.io/x/slashing/types"
-	staking "cosmossdk.io/x/staking"
+	"cosmossdk.io/x/staking"
 	stakingkeeper "cosmossdk.io/x/staking/keeper"
-	stakingtypes "cosmossdk.io/x/staking/types"
+	"cosmossdk.io/x/upgrade"
+	upgradekeeper "cosmossdk.io/x/upgrade/keeper"
 
+	abci "github.com/cometbft/cometbft/abci/types"
+	dbm "github.com/cosmos/cosmos-db"
+	"github.com/cosmos/cosmos-sdk/codec"
+	"github.com/cosmos/cosmos-sdk/codec/types"
+	"github.com/cosmos/cosmos-sdk/server/legacy"
+	"github.com/cosmos/cosmos-sdk/server/rosetta"
+	"github.com/gorilla/mux"
+	"github.com/spf13/cast"
+	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
-	// IBC modules using github.com/cosmos/ibc-go/v10 paths
-	
-	ibc "github.com/cosmos/ibc-go/v10/modules/core"
-	ibchost "github.com/cosmos/ibc-go/v10/modules/core/24-host"
+	"github.com/omnis-org/omnis/x/omnis"
+	omniskeeper "github.com/omnis-org/omnis/x/omnis/keeper"
+	omnistypes "github.com/omnis-org/omnis/x/omnis/types"
+	"github.com/omnis-org/omnis/x/token"
+	tokenkeeper "github.com/omnis-org/omnis/x/token/keeper"
+	tokentypes "github.com/omnis-org/omnis/x/token/types"
+
+	// IBC
+	ibcclient "github.com/cosmos/ibc-go/v10/modules/core/02-client"
+	ibcclientkeeper "github.com/cosmos/ibc-go/v10/modules/core/02-client/keeper"
+	ibcclienttypes "github.com/cosmos/ibc-go/v10/modules/core/02-client/types"
+	capabilitykeeper "github.com/cosmos/ibc-go/v10/modules/capability/keeper"
+	capabilitytypes "github.com/cosmos/ibc-go/v10/modules/capability/types"
+	ibcporttypes "github.com/cosmos/ibc-go/v10/modules/core/05-port/types"
+	ibcexported "github.com/cosmos/ibc-go/v10/modules/core/exported"
 	ibckeeper "github.com/cosmos/ibc-go/v10/modules/core/keeper"
-	ica "github.com/cosmos/ibc-go/v10/modules/apps/27-interchain-accounts"
-	icacontrollerkeeper "github.com/cosmos/ibc-go/v10/modules/apps/27-interchain-accounts/controller/keeper"
-	icahostkeeper "github.com/cosmos/ibc-go/v10/modules/apps/27-interchain-accounts/host/keeper"
-	ibctransfer "github.com/cosmos/ibc-go/v10/modules/apps/transfer"
-	ibctransferkeeper "github.com/cosmos/ibc-go/v10/modules/apps/transfer/keeper"
-	ibctransfertypes "github.com/cosmos/ibc-go/v10/modules/apps/transfer/types"
-
-	routetypes "github.com/cosmos/ibc-go/v10/modules/core/05-port/types" // For port keeper route
-
-	"omnis/docs"
-	omnismodule "omnis/x/omnis"
-	omnismodulekeeper "omnis/x/omnis/keeper"
-
-	"omnis/x/token"
-	tokentypes "omnis/x/token/types"
-	tokenkeeper "omnis/x/token/keeper"
-
-	autocliv1 "cosmossdk.io/api/cosmos/autocli/v1" // Keep this as it is
-)
-
-const (
-	// Name is the name of the application.
-	Name = "omnis"
-	// AccountAddressPrefix is the prefix for accounts addresses.
-	AccountAddressPrefix = "cosmos"
-	// ChainCoinType is the coin type of the chain.
-	ChainCoinType = 118
+	ibctm "github.com/cosmos/ibc-go/v10/modules/light-clients/01-tendermint"
 )
 
 var (
-	// DefaultNodeHome default home directories for the application daemon
+	_ servertypes.Application = (*OmnisApp)(nil)
+
+	// DefaultNodeHome is the default home directory for the chain's node daemon.
 	DefaultNodeHome string
-	// App extends an ABCI application, but with most of its parameters exported.
-	// They are exported for convenience in creating helper functions, as object
-	// capabilities aren't needed for testing.
-	_ runtime.App              = (*App)(nil)
-	_ servertypes.Application = (*App)(nil)
 )
 
-type App struct {
+// App extends the ABCI application for the Cosmos SDK.
+type OmnisApp struct {
 	*runtime.App
+
+	// LegacyBaseApp is the ABCI application that is wrapped by the new runtime.
+	LegacyBaseApp *legacy.BaseApp
+
+	// Codec
 	legacyAmino       *codec.LegacyAmino
 	appCodec          codec.Codec
-	txConfig          client.TxConfig
-	interfaceRegistry codectypes.InterfaceRegistry
+	cdc               codec.Codec
+	interfaceRegistry types.InterfaceRegistry
 
-	// keepers
-	// only keepers required by the app are exposed
-	// the list of all modules is available in the app_config
-	AuthKeeper          authkeeper.AccountKeeper
-	BankKeeper          bankkeeper.Keeper
-	StakingKeeper       *stakingkeeper.Keeper
-	SlashingKeeper      slashingkeeper.Keeper
-	MintKeeper          mintkeeper.Keeper
-	DistrKeeper         distrkeeper.Keeper
-	GovKeeper           *govkeeper.Keeper
-	UpgradeKeeper       *upgradekeeper.Keeper
-	AuthzKeeper         authzkeeper.Keeper
-	ConsensusParamsKeeper consensuskeeper.Keeper
-	CircuitBreakerKeeper circuitkeeper.Keeper
-	ParamsKeeper        paramskeeper.Keeper
-	FeeGrantKeeper      feegrantkeeper.Keeper // Added
+	// Keepers
+	AccountKeeper         authkeeper.AccountKeeper
+	BankKeeper            bankkeeper.Keeper
+	StakingKeeper         *stakingkeeper.Keeper
+	SlashingKeeper        slashingkeeper.Keeper
+	MintKeeper            mintkeeper.Keeper
+	DistributionKeeper    distrkeeper.Keeper
+	GovKeeper             govkeeper.Keeper
+	CrisisKeeper          *crisiskeeper.Keeper
+	UpgradeKeeper         *upgradekeeper.Keeper
+	AuthzKeeper           authzkeeper.Keeper
+	EvidenceKeeper        evidencekeeper.Keeper
+	FeegrantKeeper        feegrantkeeper.Keeper
+	GroupKeeper           groupkeeper.Keeper
+	ConsensusParamsKeeper consensusparamkeeper.Keeper
 
-	// ibc keepers
-	IBCKeeper           *ibckeeper.Keeper
-	ICAControllerKeeper icacontrollerkeeper.Keeper
-	ICAHostKeeper       icahostkeeper.Keeper
-	TransferKeeper      ibctransferkeeper.Keeper
+	// IBC
+	IBCKeeper *ibckeeper.Keeper
+	// Scoped keepers
+	ScopedIBCKeeper       capabilitykeeper.ScopedKeeper
+	ScopedTransferKeeper  capabilitykeeper.ScopedKeeper
+	ScopedICAControllerKeeper capabilitykeeper.ScopedKeeper
+	ScopedICAHostKeeper       capabilitykeeper.ScopedKeeper
 
-	OmnisKeeper omnismodulekeeper.Keeper
+	// Custom modules
+	OmnisKeeper omniskeeper.Keeper
 	TokenKeeper tokenkeeper.Keeper
-	// this line is used by starport scaffolding # stargate/app/keeperDeclaration
 
-	// simulation manager
-	sm *module.SimulationManager
+	// Module Manager
+	ModuleManager *appmodule.Manager
+
+	// Home path
+	HomePath string
+
+	// Config
+	Viper *viper.Viper
+
+	// Ticker for the application
+	Ticker *time.Ticker
+
+	// Logger
+	Logger log.Logger
 }
 
-func init() {
-	sdk.DefaultBondDenom = "stake"
-	var err error
-	clienthelpers.EnvPrefix = Name
-	DefaultNodeHome, err = clienthelpers.GetNodeDirectory(Name)
-	if err != nil {
-		panic(err)
-	}
-}
-
-// AppConfig returns the default app config.
-func AppConfig() depinject.Config {
-	return depinject.Configs(
-		appConfig,
-		depinject.Supply(
-			// supply custom module basics
-			map[string]appmodule.AppModuleBasic{
-				genutiltypes.ModuleName: genutil.NewAppModuleBasic(genutiltypes.DefaultMessageValidator),
-			},
-		),
-	)
-}
-
-// New returns a reference to an initialized App.
-func New(
+// NewOmnisApp initializes the application.
+func NewOmnisApp(
 	logger log.Logger,
 	db dbm.DB,
 	traceStore io.Writer,
 	loadLatest bool,
-	appopts servertypes.AppOptions,
-	baseAppOptions ...func(*baseapp.BaseApp),
-) *App {
-	app := &App{}
-	appBuilder := &runtime.AppBuilder{}
+	appOpts servertypes.AppOptions,
+) *OmnisApp {
+	// A new Go module, `depinject`, is used to handle dependency injection.
+	// This helps with managing the keepers and their dependencies.
+	var (
+		app *runtime.App
+		// Autocli is a new way to generate CLI commands for your modules.
+		autocliOpts autocli.AppOptions
+		// Module keepers
+		accountKeeper         authkeeper.AccountKeeper
+		bankKeeper            bankkeeper.Keeper
+		stakingKeeper         *stakingkeeper.Keeper
+		slashingKeeper        slashingkeeper.Keeper
+		mintKeeper            mintkeeper.Keeper
+		distributionKeeper    distrkeeper.Keeper
+		govKeeper             govkeeper.Keeper
+		crisisKeeper          *crisiskeeper.Keeper
+		upgradeKeeper         *upgradekeeper.Keeper
+		authzKeeper           authzkeeper.AuthzKeeper
+		evidenceKeeper        evidencekeeper.Keeper
+		feegrantKeeper        feegrantkeeper.Keeper
+		groupKeeper           groupkeeper.Keeper
+		consensusParamsKeeper consensusparamkeeper.Keeper
 
-	// merge the AppConfig and other configuration in one config
-	appConfig := depinject.Configs(
-		AppConfig(),
-		depinject.Supply(
-			// supply app options
-			appopts,
-			logger,
-			// supply logger
-			// here alternative options can be supplied to the DI container.
-			// those options can be used f. e to override the default behavior of some modules.
-			// for instance supplying a custom address codec for not using bech32 addresses.
-			// read the depinject documentation and depinject module wiring for more information
-			// on available options and how to use them.
+		// Custom keepers
+		omnisKeeper omniskeeper.Keeper
+		tokenKeeper tokenkeeper.Keeper
+
+		// IBC keepers
+		ibcKeeper *ibckeeper.Keeper
+
+		// New runtime configuration is done here.
+		// A new method, `app.Build`, is used to construct the application.
+	)
+
+	// depinject is used to configure the modules and their dependencies.
+	// It replaces the old, manual way of wiring up keepers in the constructor.
+	// A lot of the `app.go` logic is now handled by this.
+	depinject.Make(
+		depinject.Configs(
+			serverconfig.AppConfig,
+			depinject.Provide(
+				// Define all custom modules here.
+				// This is where you would provide your x/token and x/omnis keepers.
+				func(
+					m map[string]appmodule.AppModule,
+					cfg depinject.Config,
+					logger log.Logger,
+					cdc codec.Codec,
+					homePath string,
+					ac authtypes.AccountKeeper,
+					bk banktypes.BankKeeper,
+				) (map[string]appmodule.AppModule, omniskeeper.Keeper, tokenkeeper.Keeper) {
+					omnisKeeper = omniskeeper.NewKeeper(
+						cdc,
+						logger,
+						homePath,
+					)
+
+					tokenKeeper = tokenkeeper.NewKeeper(
+						cdc,
+						logger,
+						homePath,
+					)
+
+					m["omnis"] = omnis.NewAppModule(omnisKeeper)
+					m["token"] = token.NewAppModule(tokenKeeper)
+
+					return m, omnisKeeper, tokenKeeper
+				},
+			),
 		),
+		&app,
+		&autocliOpts,
+		&accountKeeper,
+		&bankKeeper,
+		&stakingKeeper,
+		&slashingKeeper,
+		&mintKeeper,
+		&distributionKeeper,
+		&govKeeper,
+		&crisisKeeper,
+		&upgradeKeeper,
+		&authzKeeper,
+		&evidenceKeeper,
+		&feegrantKeeper,
+		&groupKeeper,
+		&consensusParamsKeeper,
+		&omnisKeeper,
+		&tokenKeeper,
+		&ibcKeeper,
 	)
 
-	var appmodules map[string]appmodule.AppModule
-	if err := depinject.Inject(appConfig,
-		&appBuilder,
-		&appmodules,
-		&app.appCodec,
-		&app.legacyAmino,
-		&app.txConfig,
-		&app.interfaceRegistry,
-		&app.AuthKeeper,
-		&app.BankKeeper,
-		&app.StakingKeeper,
-		&app.SlashingKeeper,
-		&app.MintKeeper,
-		&app.DistrKeeper,
-		&app.GovKeeper,
-		&app.UpgradeKeeper,
-		&app.AuthzKeeper,
-		&app.ConsensusParamsKeeper,
-		&app.CircuitBreakerKeeper,
-		&app.ParamsKeeper,
-		&app.OmnisKeeper,
-		&app.TokenKeeper,
-		&app.FeeGrantKeeper, // <--- Added FeeGrantKeeper to inject
-		// this line is used by starport scaffolding # stargate/app/keeperDeclaration
-	); err != nil {
-		panic(err)
-	}
+	// The app struct is now initialized with the new runtime.
+	legacyBaseApp := legacy.NewBaseApp(
+		"omnis",
+		logger,
+		db,
+		app.TxConfig.TxDecoder(),
+		nil, // Replaced by runtime.App
+		nil, // Replaced by runtime.App
+	)
+	legacyBaseApp.SetCommitMultiStore(app.CommitMultiStore())
+	legacyBaseApp.SetRouter(app.Router())
+	legacyBaseApp.SetQueryRouter(app.QueryRouter())
 
-	// Initialize TokenKeeper after other core keepers are available
-	app.TokenKeeper = tokenkeeper.NewKeeper(
-		app.AuthKeeper.AddressCodec(),
-		app.BaseApp.StoreService(),
-		app.BankKeeper,
-		app.AuthKeeper,
+	// Init the IBC Keeper
+	ibcKeeper = ibckeeper.NewKeeper(
+		app.AppCodec(),
+		app.State,
+		app.ScopedIBCKeeper,
+		app.ScopedTransferKeeper,
+		nil,
 	)
 
-	// add to default baseapp options
-	// enable optimistic execution
-	baseAppOptions = append(baseAppOptions, baseapp.SetOptimisticExecution())
-
-	// build app
-	app.App = appBuilder.Build(db, traceStore,
-		baseAppOptions...,
+	// The IBC client keeper is added here.
+	ibcClientKeeper := ibcclientkeeper.NewKeeper(
+		app.AppCodec(),
+		app.State,
+		app.ScopedIBCKeeper,
+		ibcKeeper.ConnectionKeeper,
+		ibcKeeper.ChannelKeeper,
 	)
 
-	// Define the module manager with all your modules
-	app.mm = module.NewManager(
-		genutil.NewAppModule(
-			app.appCodec,
-			app.GetEnvProposerAPIRouter(),
-			app.txConfig,
-			app.AuthKeeper,
-			app.BankKeeper,
-			app.ConsensusParamsKeeper,
-		),
+	app.ModuleManager.RegisterModules(
+		auth.NewAppModule(accountKeeper, nil),
+		bank.NewAppModule(bankKeeper, nil),
+		staking.NewAppModule(stakingKeeper, accountKeeper, bankKeeper, nil),
+		mint.NewAppModule(mintKeeper, accountKeeper, bankKeeper, nil),
+		distribution.NewAppModule(distributionKeeper, accountKeeper, bankKeeper, nil),
+		gov.NewAppModule(govKeeper, accountKeeper, bankKeeper, nil),
+		crisis.NewAppModule(crisisKeeper, nil),
+		slashing.NewAppModule(slashingkeeper, accountKeeper, bankKeeper, nil),
+		feegrantmodule.NewAppModule(accountKeeper, bankKeeper, feegrantkeeper, nil),
+		upgrade.NewAppModule(upgradekeeper),
+		evidence.NewAppModule(evidencekeeper),
+		authzmodule.NewAppModule(authzkeeper, accountKeeper, nil),
+		groupmodule.NewAppModule(groupkeeper, nil),
+		consensus.NewAppModule(consensusParamsKeeper),
 
-
-
-
-	
-		auth.NewAppModule(app.appCodec, app.AuthKeeper, authsims.RandomGenesisAccounts, app.GetTxConfig()),
-		bank.NewAppModule(app.appCodec, app.BankKeeper, app.AuthKeeper.AccountKeeper()),
-		staking.NewAppModule(app.appCodec, app.StakingKeeper, app.AuthKeeper.AccountKeeper(), app.BankKeeper),
-		mint.NewAppModule(app.appCodec, app.MintKeeper, app.AuthKeeper.AccountKeeper(), nil, app.BankKeeper),
-		distr.NewAppModule(app.appCodec, app.DistrKeeper, app.AuthKeeper.AccountKeeper(), app.BankKeeper, app.StakingKeeper),
-		slashing.NewAppModule(app.appCodec, app.SlashingKeeper, app.AuthKeeper.AccountKeeper(), app.BankKeeper, app.StakingKeeper),
-		gov.NewAppModule(app.appCodec, app.GovKeeper, app.AuthKeeper.AccountKeeper(), app.BankKeeper, app.GetModuleManager(), app.txConfig),
-		params.NewAppModule(app.ParamsKeeper),
-		circuit.NewAppModule(app.appCodec, app.CircuitBreakerKeeper),
-		upgrade.NewAppModule(app.UpgradeKeeper),
-		authz.NewAppModule(app.appCodec, app.AuthzKeeper, app.AuthKeeper.AccountKeeper(), app.BankKeeper, app.interfaceRegistry),
-		feegrant.NewAppModule(app.appCodec, app.FeeGrantKeeper, app.AuthKeeper.AccountKeeper(), app.BankKeeper, app.interfaceRegistry),
-		evidence.NewAppModule(app.AuthKeeper.AccountKeeper(), app.BankKeeper, app.SlashingKeeper), // Added Evidence Module
-		consensus.NewAppModule(app.appCodec, app.ConsensusParamsKeeper), // Added Consensus Module
 		// IBC modules
-		ibctransfer.NewAppModule(app.TransferKeeper),
-		ibc.NewAppModule(app.IBCKeeper),
-		ica.NewAppModule(&app.ICAControllerKeeper, &app.ICAHostKeeper),
-		omnismodule.NewAppModule(app.appCodec, app.OmnisKeeper, app.AuthKeeper.AccountKeeper(), app.BankKeeper),
-		token.NewAppModule(app.appCodec, app.TokenKeeper, app.AuthKeeper.AccountKeeper(), app.BankKeeper),
-		// this line is used by starport scaffolding # stargate/app/module
+		ibcclient.NewAppModule(ibcClientKeeper),
+		ibctm.NewAppModule(),
 	)
 
-	// create the simulation manager and define the order of the modules for deterministic simulations
-	overridemodules := map[string]module.AppModuleSimulation{
-		authtypes.ModuleName: auth.NewAppModule(app.appCodec, app.AuthKeeper, authsims.RandomGenesisAccounts, app.GetTxConfig()),
-	}
-	app.sm = module.NewSimulationManagerFromAppModules(app.mm.Modules, overridemodules)
-	app.sm.RegisterStoreDecoders()
-
-	// A custom InitChainer sets if extra pre-init-genesis logic is required.
-	// This is necessary for manually registered modules that do not support app wiring.
-	// Manually set the module version map as shown below.
-	// The upgrade module will automatically handle de-duplication of the module version map.
-
-	// Corrected SetInitChainer:
-	app.SetInitChainer(func(ctx sdk.Context, req *abci.RequestInitChain) (*abci.ResponseInitChain, error) {
-		if err := app.UpgradeKeeper.SetModuleVersionMap(ctx, app.mm.GetVersionMap()); err != nil { // Corrected: app.mm.GetVersionMap()
-			return nil, err
-		}
-		return app.App.InitChainer(ctx, req)
-	})
-
-
-	if err := app.Load(loadLatest); err != nil {
-		panic(err)
-	}
-
-	return app
-}
-
-// GetSubspace returns a param subspace for a given module name.
-func (app *App) GetSubspace(moduleName string) paramstypes.Subspace {
-	subspace, _ := app.ParamsKeeper.GetSubspace(moduleName)
-	return subspace
-}
-
-// LegacyAmino returns App's amino codec.
-func (app *App) LegacyAmino() *codec.LegacyAmino {
-	return app.legacyAmino
-}
-
-// AppCodec returns App's app codec.
-func (app *App) AppCodec() codec.Codec {
-	return app.appCodec
-}
-
-// InterfaceRegistry returns App's InterfaceRegistry.
-func (app *App) InterfaceRegistry() codectypes.InterfaceRegistry {
-	return app.interfaceRegistry
-}
-
-// TxConfig returns App's TxConfig
-func (app *App) TxConfig() client.TxConfig {
-	return app.txConfig
-}
-
-// GetKey returns the KVStoreKey for the provided store key.
-func (app *App) GetKey(storeKey string) *storetypes.KVStoreKey {
-	kvStoreKey, ok := app.UnsafeFindStoreKey(storeKey).(*storetypes.KVStoreKey)
-	if !ok {
-		return nil
-	}
-	return kvStoreKey
-}
-
-// SimulationManager implements the SimulationApp interface
-func (app *App) SimulationManager() *module.SimulationManager {
-	return app.sm
-}
-
-// RegisterAPIRoutes registers all application module routes with the provided
-// API server.
-func (app *App) RegisterAPIRoutes(apiSvr *api.Server, apiConfig config.APIConfig) {
-	app.App.RegisterAPIRoutes(apiSvr, apiConfig)
-	// register swagger API in app.go so that other applications can override easily
-	if err := server.RegisterSwaggerAPI(apiSvr.ClientCtx, apiSvr.Router, apiConfig.Swagger); err != nil {
-		panic(err)
+	// Create new OmnisApp struct with all keepers
+	newApp := &OmnisApp{
+		App:                   app,
+		LegacyBaseApp:         legacyBaseApp,
+		appCodec:              app.AppCodec(),
+		interfaceRegistry:     app.InterfaceRegistry(),
+		AccountKeeper:         accountKeeper,
+		BankKeeper:            bankKeeper,
+		StakingKeeper:         stakingKeeper,
+		SlashingKeeper:        slashingKeeper,
+		MintKeeper:            mintKeeper,
+		DistributionKeeper:    distributionKeeper,
+		GovKeeper:             govKeeper,
+		CrisisKeeper:          crisisKeeper,
+		UpgradeKeeper:         upgradeKeeper,
+		AuthzKeeper:           authzkeeper,
+		EvidenceKeeper:        evidenceKeeper,
+		FeegrantKeeper:        feegrantKeeper,
+		GroupKeeper:           groupKeeper,
+		ConsensusParamsKeeper: consensusParamsKeeper,
+		IBCKeeper:             ibcKeeper,
+		OmnisKeeper:           omnisKeeper,
+		TokenKeeper:           tokenKeeper,
+		HomePath:              appOpts.Get(flags.FlagHome).(string),
+		Logger:                logger,
 	}
 
-	// register app's OpenAPI routes.
-	docs.RegisterOpenAPIService(Name, apiSvr.Router)
+	// Set handlers for the app.
+	newApp.MountStores()
+
+	// The app is now ready.
+	return newApp
 }
 
-// GetMaccPerms returns a copy of the module account permissions
-// NOTE: This is solely to be used for testing purposes.
-func GetMaccPerms() map[string][]string {
-	dup := make(map[string][]string)
-	for acc, perms := range maccPerms {
-		dup[acc] = perms
+// MountStores mounts all the store keys.
+func (app *OmnisApp) MountStores() {
+	// Your custom store keys and other app setup logic can go here.
+	// This is where you would set up your key-value stores for the modules.
+	keys := make([]types.StoreKey, 0)
+	for _, module := range app.ModuleManager.Modules {
+		keys = append(keys, module.StoreKeys()...)
 	}
-	return dup
-}
 
-// maccPerms are the permissions for module accounts.
-var maccPerms = map[string][]string{
-	authtypes.FeeCollectorName:     nil,
-	distrtypes.ModuleName:          nil,
-	minttypes.ModuleName:           {authtypes.Minter},
-	stakingtypes.BondedPoolName:    {authtypes.Burner, authtypes.Staking},
-	stakingtypes.NotBondedPoolName: {authtypes.Burner, authtypes.Staking},
-	govtypes.ModuleName:            {authtypes.Burner},
-	ibctransfertypes.ModuleName:    {authtypes.Minter, authtypes.Burner},
-	tokentypes.ModuleName:          {authtypes.Minter, authtypes.Burner},
-}
+	// Mount your custom module store keys
+	keys = append(keys, omnistypes.StoreKey, tokentypes.StoreKey)
 
-// BlockedAddresses returns all the app's blocked account addresses.
-func BlockedAddresses() map[string]bool {
-	result := make(map[string]bool)
-	for acc := range GetMaccPerms() {
-		result[authtypes.NewModuleAddress(acc).String()] = true
+	for _, key := range keys {
+		app.LegacyBaseApp.MountStore(key, types.StoreKeyType)
 	}
-	return result
 }
 
-// For Store and Transient Keys, these are typically defined in the `New` function.
-// Let's ensure they are correct inside `func New(...)`
+// Name returns the name of the App.
+func (app *OmnisApp) Name() string { return app.App.Name() }
 
-/*
-	// ... inside New func, after depinject.Inject and before appBuilder.Build()
+// GetBaseApp is for testing purposes.
+func (app *OmnisApp) GetBaseApp() *legacy.BaseApp { return app.LegacyBaseApp }
 
-	keys := sdk.NewKVStoreKeys(
-		authtypes.StoreKey,
-		banktypes.StoreKey,
-		stakingtypes.StoreKey,
-		minttypes.StoreKey,
-		distrtypes.StoreKey,
-		slashingtypes.StoreKey,
-		govtypes.StoreKey,
-		paramtypes.StoreKey,
-		upgradetypes.StoreKey,
-		feegrant.StoreKey,
-		evidencetypes.StoreKey,
-		ibchost.StoreKey,
-		ibctransfertypes.StoreKey,
+// PreBlocker returns the PreBlocker.
+func (app *OmnisApp) PreBlocker(ctx context.Context) error {
+	return app.App.PreBlocker(ctx)
+}
 
-		routetypes.StoreKey, // This might be `porttypes.StoreKey` depending on your IBC version
-		consensustypes.StoreKey,
-		tokentypes.StoreKey,
-		autocliv1.StoreKey,
+// BeginBlocker returns the BeginBlocker.
+func (app *OmnisApp) BeginBlocker(ctx context.Context, req abci.RequestBeginBlock) (abci.ResponseBeginBlock, error) {
+	return app.App.BeginBlocker(ctx, req)
+}
 
+// EndBlocker returns the EndBlocker.
+func (app *OmnisApp) EndBlocker(ctx context.Context, req abci.RequestEndBlock) (abci.ResponseEndBlock, error) {
+	return app.App.EndBlocker(ctx, req)
+}
 
-	)
-	memKeys := sdk.NewTransientStoreKeys(
-		paramtypes.TStoreKey,
-	
-		tokentypes.MemStoreKey,
-	)
+// DeliverTx returns the DeliverTx.
+func (app *OmnisApp) DeliverTx(req abci.RequestDeliverTx) (abci.ResponseDeliverTx, error) {
+	return app.LegacyBaseApp.DeliverTx(req)
+}
 
-	// ... continue with appBuilder.Build() etc.
+// LoadHeight returns the LoadHeight.
+func (app *OmnisApp) LoadHeight(height int64) error {
+	return app.App.LoadHeight(height)
+}
 
-*/
+// LastCommitId returns the last commit ID.
+func (app *OmnisApp) LastCommitId() types.CommitID {
+	return app.LegacyBaseApp.LastCommitID()
+}
+
+// LastBlockHeight returns the last block height.
+func (app *OmnisApp) LastBlockHeight() int64 {
+	return app.LegacyBaseApp.LastBlockHeight()
+}
+
+// CheckTx returns the CheckTx.
+func (app *OmnisApp) CheckTx(req abci.RequestCheckTx) (abci.ResponseCheckTx, error) {
+	return app.LegacyBaseApp.CheckTx(req)
+}
