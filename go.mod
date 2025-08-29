@@ -4,27 +4,40 @@ go 1.24
 
 require (
 	github.com/cometbft/cometbft v0.37.5
-	github.com/cosmos/cosmos-sdk v0.50.0
 	github.com/cosmos/cosmos-db v1.0.2
-	github.com/cosmos/ibc-go/v10 v10.2.0
 	github.com/cosmos/gogoproto v1.4.10
+	github.com/cosmos/ibc-go/v10 v10.2.0
 	github.com/gorilla/mux v1.8.1
-	github.com/omnis-org/omnis/x/omnis v0.0.0
-	github.com/omnis-org/omnis/x/token v0.0.0
 	github.com/rakyll/statik v0.1.7
 	github.com/spf13/cast v1.6.0
 	github.com/spf13/cobra v1.8.0
 	github.com/spf13/pflag v1.0.5
 	github.com/spf13/viper v1.16.0
 	golang.org/x/exp v0.0.0-20230510235704-dd9e11501b44
+	cosmossdk.io/api v0.53.3
+	cosmossdk.io/client v0.53.3
+	cosmossdk.io/core v0.53.3
+	cosmossdk.io/depinject v0.53.3
+	cosmossdk.io/log v0.53.3
+	cosmossdk.io/math v0.53.3
+	cosmossdk.io/server v0.53.3
+	cosmossdk.io/tools/confix v0.53.3
+	cosmossdk.io/x/auth v0.53.3
+	cosmossdk.io/x/auth/migrations/legacytx v0.53.3
+	cosmossdk.io/x/auth/tx/config v0.53.3
+	cosmossdk.io/x/authz v0.53.3
+	cosmossdk.io/x/bank v0.53.3
+	cosmossdk.io/x/circuit v0.53.3
+	cosmossdk.io/x/consensus v0.53.3
+	cosmossdk.io/x/distribution v0.53.3
+	cosmossdk.io/x/evidence v0.53.3
+	cosmossdk.io/x/feegrant v0.53.3
+	cosmossdk.io/x/genutil v0.53.3
+	cosmossdk.io/x/gov v0.53.3
+	cosmossdk.io/x/group v0.53.3
+	cosmossdk.io/x/mint v0.53.3
+	cosmossdk.io/x/nft v0.53.3
+	cosmossdk.io/x/slashing v0.53.3
+	cosmossdk.io/x/staking v0.53.3
+	cosmossdk.io/x/upgrade v0.53.3
 )
-
-// This replace directive is crucial. It tells Go to use the
-// 'cosmossdk.io/cosmos-sdk' module for all `github.com/cosmos/cosmos-sdk`
-// imports. The previous path was incorrect. This path will be found
-// in the Go module proxy and resolve the 404 error.
-replace cosmossdk.io/cosmos-sdk => github.com/cosmos/cosmos-sdk v0.50.0
-
-// These replace directives are for local development of your modules.
-replace github.com/omnis-org/omnis/x/omnis => ./x/omnis
-replace github.com/omnis-org/omnis/x/token => ./x/token
